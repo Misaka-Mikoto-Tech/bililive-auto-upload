@@ -11,7 +11,7 @@ record_upload_manager = RecordUploadManager("./recorder_config.yaml", "recorder_
 async def respond_process():
     json_request = await request.json
     print(json_request)
-    await record_upload_manager.handle_update(json_request)
+    await record_upload_manager.handle_update_blrec(json_request)
     return Response(response="", status=200)
 
 

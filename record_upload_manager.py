@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import traceback
+import toml
 from queue import Queue
 from string import Template
 
@@ -12,8 +13,9 @@ import yaml
 from bilibili_api import video
 
 from comment_task import CommentTask
+from blrec_event import BlrecEvent
 from recorder_config import RecorderConfig, UploaderAccount
-from recorder_manager import RecorderManager
+#from recorder_manager import RecorderManager
 from session import Session, Video
 from subtitle_task import SubtitleTask
 from task_save import TaskSave
@@ -22,7 +24,6 @@ from upload_task import UploadTask
 CONTINUE_SESSION_MINUTES = 5
 WAIT_SESSION_MINUTES = 6
 WAIT_BEFORE_SESSION_MINUTES = 1
-
 
 class RecordUploadManager:
     def __init__(self, config_path, save_path):
@@ -37,8 +38,10 @@ class RecordUploadManager:
             print("Creating save file")
             self.save = TaskSave()
             self.save_progress()
-        self.recorder_manager = RecorderManager([room.id for room in self.config.rooms])
-        self.sessions: {str: Session} = dict()
+        
+        # 改为接收 blrec 的数据，BililiveRecorder 会漏录数据
+        #self.recorder_manager = RecorderManager([room.id for room in self.config.rooms])
+        self.sessions: dict[int, Session] = dict() # blrec 没有session_id的概念，因此以room_id作为key
         self.video_upload_queue: Queue[UploadTask] = Queue()
         self.comment_post_queue: Queue[CommentTask] = Queue()
         self.subtitle_post_queue: Queue[SubtitleTask] = Queue()
@@ -64,6 +67,7 @@ class RecordUploadManager:
         while True:
             upload_task = self.video_upload_queue.get()
             try:
+                # TODO session_id 貌似最好还是要处理一下的，否则无法区分同个room_id的多个已上传但未通过审核的任务
                 first_video_comment = upload_task.session_id not in self.save.session_id_map
                 bv_id = upload_task.upload(self.save.session_id_map)
                 sys.stdout.flush()
@@ -182,24 +186,25 @@ class RecordUploadManager:
             "flv_path": session.videos[0].flv_file_path()
         }
         title = Template(room_config.title).substitute(substitute_dict)
-        temp_title = title
-        i = 1
-        other_video_titles = [
-            name for session_id, name in self.save.video_name_history.items()
-            if session_id != session.session_id
-        ]
-        while temp_title in other_video_titles:
-            i += 1
-            temp_title = f"{temp_title}{i}"
-        title = temp_title
-        with self.save_lock:
-            self.save.video_name_history[session.session_id] = title
+        # blrec 无法区分不同session_id，因此历史title没有意义
+        # temp_title = title
+        # i = 1
+        # other_video_titles = [
+        #     name for room_id, name in self.save.video_name_history.items()
+        #     if room_id != session.room_id
+        # ]
+        # while temp_title in other_video_titles:
+        #     i += 1
+        #     temp_title = f"{temp_title}{i}"
+        # title = temp_title
+        # with self.save_lock:
+        #     self.save.video_name_history[session.room_id] = title
         description = Template(room_config.description).substitute(substitute_dict)
         await session.gen_early_video()
-        early_upload_task = None
-        if session.early_video_path is not None:
+        early_upload_task = None # 无字幕版视频上传
+        if session.early_video_path is not None: # 可能是原始文件(录制文件未分段)或xx.all.flv, 多个分段且分辨率不同时会出现无原始文件的情况
             early_upload_task = UploadTask(
-                session_id=session.session_id,
+                #session_id=session.session_id,
                 video_path=session.early_video_path,
                 thumbnail_path=session.output_path()['thumbnail'],
                 sc_path=session.output_path()['sc_file'],
@@ -217,7 +222,7 @@ class RecordUploadManager:
         await asyncio.sleep(WAIT_SESSION_MINUTES * 60)
         await session.gen_danmaku_video()
         danmaku_upload_task = UploadTask(
-            session_id=session.session_id,
+            #session_id=session.session_id,
             video_path=session.output_path()['danmaku_video'],
             thumbnail_path=session.output_path()['thumbnail'],
             sc_path=session.output_path()['sc_file'],
@@ -234,40 +239,79 @@ class RecordUploadManager:
         self.video_upload_queue.put(
             danmaku_upload_task
         )
-        if early_upload_task is None:
+        if early_upload_task is None: # TODO 无原始文件时直接创建评论任务？
             self.comment_post_queue.put(
                 CommentTask.from_upload_task(danmaku_upload_task)
             )
 
-    async def handle_update(self, update_json: dict):
-        room_id = update_json["EventData"]["RoomId"]
-        session_id = update_json["EventData"]["SessionId"]
-        event_timestamp = dateutil.parser.isoparse(update_json["EventTimestamp"])
+    # web处理函数改为接收 blrec 请求
+    async def handle_update_blrec(self, update_json: dict):
+        id = update_json["id"] #guid
+        room_id = BlrecEvent.get_room_id(update_json)
+        event_timestamp = dateutil.parser.isoparse(update_json["date"])
+        event_type = update_json["type"]
+
         room_config = None
         for room in self.config.rooms:
             if room.id == room_id:
                 room_config = room
+        
         if room_config is None:
-            print(f"Cannot find room config for {room_id}!")
+            #print(f"Cannot find room config for {room_id}!")
             return
-        if update_json["EventType"] == "SessionStarted":
+        else:
+            print(f"Received blrec event:{event_type} of room:{room_id}")
+        
+        if event_type in ["LiveBeganEvent", "RecordingStartedEvent"]: # 允许从中间开始录制
             for session in self.sessions.values():
                 if session.room_id == room_id and \
-                        (event_timestamp - session.end_time).total_seconds() / 60 < CONTINUE_SESSION_MINUTES:
-                    self.sessions[session_id] = session
+                        (event_timestamp - session.end_time).total_seconds() / 60 < CONTINUE_SESSION_MINUTES: # 5分钟内重新开播(开始录制)的视为同一场直播
                     if session.upload_task is not None:
                         session.upload_task.cancel()
                     return
-            self.sessions[session_id] = Session(update_json, room_config=room_config)
+            self.sessions[room_id] = Session(update_json, room_config=room_config)
         else:
-            if session_id not in self.sessions:
-                print(f"Cannot find {room_id}/{session_id} for: {update_json}")
-                return
-            current_session: Session = self.sessions[session_id]
+            current_session: Session = self.sessions[room_id]
             current_session.process_update(update_json)
-            if update_json["EventType"] == "FileClosed":
+            # blrec 支持转封装flv为mp4，录制结束后可能还会收到VideoPostprocessingCompletedEvent事件，
+            # 此事件可能会在录制结束事件之后发送，当前无法得知是否会被转封装，临时解决方案是关闭转封装功能
+            if event_type == "VideoFileCompletedEvent":
                 new_video = Video(update_json)
                 await current_session.add_video(new_video)
-            elif update_json["EventType"] == "SessionEnded":
+            elif event_type in ["RecordingFinishedEvent", "RecordingCancelledEvent"]: # 录制结束和取消都视为录制完成
                 current_session.upload_task = \
                     asyncio.run_coroutine_threadsafe(self.upload_video(current_session), self.video_processing_loop)
+
+
+    # async def handle_update(self, update_json: dict):
+    #     room_id = update_json["EventData"]["RoomId"]
+    #     session_id = update_json["EventData"]["SessionId"]
+    #     event_timestamp = dateutil.parser.isoparse(update_json["EventTimestamp"])
+    #     room_config = None
+    #     for room in self.config.rooms:
+    #         if room.id == room_id:
+    #             room_config = room
+    #     if room_config is None:
+    #         print(f"Cannot find room config for {room_id}!")
+    #         return
+    #     if update_json["EventType"] == "SessionStarted":
+    #         for session in self.sessions.values():
+    #             if session.room_id == room_id and \
+    #                     (event_timestamp - session.end_time).total_seconds() / 60 < CONTINUE_SESSION_MINUTES:
+    #                 self.sessions[session_id] = session
+    #                 if session.upload_task is not None:
+    #                     session.upload_task.cancel()
+    #                 return
+    #         self.sessions[session_id] = Session(update_json, room_config=room_config)
+    #     else:
+    #         if session_id not in self.sessions:
+    #             print(f"Cannot find {room_id}/{session_id} for: {update_json}")
+    #             return
+    #         current_session: Session = self.sessions[session_id]
+    #         current_session.process_update(update_json)
+    #         if update_json["EventType"] == "FileClosed":
+    #             new_video = Video(update_json)
+    #             await current_session.add_video(new_video)
+    #         elif update_json["EventType"] == "SessionEnded":
+    #             current_session.upload_task = \
+    #                 asyncio.run_coroutine_threadsafe(self.upload_video(current_session), self.video_processing_loop)

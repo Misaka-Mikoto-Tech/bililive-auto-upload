@@ -27,7 +27,7 @@ class SubtitleTask:
         return vars(self)
 
     @staticmethod
-    def from_dict(save_dict: {str: Any}) -> 'SubtitleTask':
+    def from_dict(save_dict: dict[str, Any]) -> 'SubtitleTask':
         comment_task = SubtitleTask(
             save_dict['subtitle_path'],
             save_dict['bvid'],

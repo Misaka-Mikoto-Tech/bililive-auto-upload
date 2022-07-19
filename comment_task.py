@@ -68,7 +68,7 @@ class CommentTask:
         return vars(self)
 
     @staticmethod
-    def from_dict(save_dict: {str: Any}) -> 'CommentTask':
+    def from_dict(save_dict: dict[str, Any]) -> 'CommentTask':
         comment_task = CommentTask(
             save_dict['sc_path'],
             save_dict['he_path'],
@@ -84,7 +84,7 @@ class CommentTask:
         comment_task = CommentTask(upload_task.sc_path, upload_task.he_path, upload_task.session_id, upload_task.verify)
         return comment_task
 
-    def post_comment(self, session_dict: {str: str}) -> bool:
+    def post_comment(self, session_dict: dict[str, str]) -> bool:
         if (datetime.datetime.now(datetime.timezone.utc) - self.start_date).total_seconds() / 60 / 60 > HOURS_THRESHOLD:
             return True
         if self.session_id not in session_dict:

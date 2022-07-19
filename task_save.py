@@ -5,9 +5,9 @@ from subtitle_task import SubtitleTask
 class TaskSave:
 
     def __init__(self):
-        self.session_id_map: {str: str} = {}
-        self.active_comment_tasks: [CommentTask] = []
-        self.active_subtitle_tasks: [SubtitleTask] = []
+        self.session_id_map: dict[str, str] = {}
+        self.active_comment_tasks: list[CommentTask] = []
+        self.active_subtitle_tasks: list[SubtitleTask] = []
         self.video_name_history = {}
 
     def to_dict(self):

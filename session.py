@@ -1,16 +1,20 @@
 import asyncio
 import datetime
+import json
 import os
 import sys
 import time
 import traceback
 from asyncio import Task
 from typing import Optional
+from __future__ import annotations
 
 import dateutil.parser
-from gpuinfo import GPUInfo
+from blrec_event import BlrecEvent
+#from gpuinfo import GPUInfo
 
 from commons import BINARY_PATH
+from commons import get_room_id
 from recorder_config import RecoderRoom
 
 
@@ -30,23 +34,26 @@ async def async_wait_output(command):
 
 class Video:
     base_path: str
-    session_id: str
-    video_length: float
+    base_dir: str
     room_id: int
+    date:datetime
     video_resolution: str
     video_resolution_x: int
     video_resolution_y: int
     video_length_flv: float
 
     def __init__(self, file_closed_event_json):
-        flv_name = file_closed_event_json['EventData']['RelativePath']
+        flv_name = file_closed_event_json['data']['path']
         self.base_path = os.path.abspath(flv_name.rpartition('.')[0])
-        self.session_id = file_closed_event_json["EventData"]["SessionId"]
-        self.room_id = file_closed_event_json["EventData"]["RoomId"]
-        self.video_length = file_closed_event_json["EventData"]["Duration"]
+        self.base_dir = os.path.dirname(self.base_path)
+        self.room_id = file_closed_event_json["data"]["room_id"]
+        self.date = file_closed_event_json["date"]
 
     def flv_file_path(self):
         return self.base_path + ".flv"
+
+    def mp4_file_path(self):
+        return self.base_path + ".mp4"
 
     def xml_file_path(self):
         return self.base_path + ".xml"
@@ -72,17 +79,18 @@ class Video:
 
 
 class Session:
-    session_id: str
-    start_time: time.time
+    live_start_time: datetime.datetime # 开播时间
+    start_time: datetime.datetime # 开始录制事件
     end_time: Optional[datetime.datetime]
+    uid: int
     room_id: int
-    videos: [Video]
+    videos: list[Video]
     total_length: float
-    notify_length: int
+    notify_length: int # 暂时不知道是啥
     length_alert: bool
-    he_time: Optional[float]
-    early_video_path: Optional[str]
-    room_name: str
+    he_time: Optional[float] # high energy
+    early_video_path: Optional[str] # 将碎片文件合并起来的文件 xxx.all.flv
+    room_name: str # 如果开播以后点开始录播，此数据会获取不到
     room_title: str
     room_config: RecoderRoom
 
@@ -91,9 +99,9 @@ class Session:
             self.room_config = RecoderRoom({})
         else:
             self.room_config = room_config
-        self.start_time = dateutil.parser.isoparse(session_start_event_json["EventTimestamp"])
-        self.session_id = session_start_event_json["EventData"]["SessionId"]
-        self.room_id = session_start_event_json["EventData"]["RoomId"]
+        self.live_start_time = time.ctime(session_start_event_json["data"]["live_start_time"])
+        self.start_time = dateutil.parser.isoparse(session_start_event_json["date"])
+        self.room_id = session_start_event_json["data"]["room_id"]
         self.end_time = None
         self.notify_length = notify_length
         self.length_alert = False
@@ -105,10 +113,9 @@ class Session:
         self.upload_task: Optional[Task] = None
 
     def process_update(self, update_json):
-        self.room_name = update_json["EventData"]["Name"]
-        self.room_title = update_json["EventData"]["Title"]
-        if update_json["EventType"] == "SessionEnded":
-            self.end_time = dateutil.parser.isoparse(update_json["EventTimestamp"])
+        BlrecEvent.update_room_info(json, self)
+        if update_json["type"] in ["RecordingFinishedEvent", "RecordingCancelledEvent"]: # 录制结束
+            self.end_time = dateutil.parser.isoparse(update_json["date"])
 
     async def add_video(self, video):
         try:
@@ -118,13 +125,16 @@ class Session:
             print(f"video corrupted, skipping: {video.flv_file_path()}")
             return
         self.videos += [video]
-        new_length = self.total_length + video.video_length
+        new_length = self.total_length + video.video_length_flv
         if (new_length // self.notify_length) != (self.total_length // self.notify_length):
             self.length_alert = True
         self.total_length += new_length
 
     def output_base_path(self):
-        return self.videos[0].base_path + ".all"
+        process_dir = self.videos[0].base_dir + "/process"
+        if(not os.path.isdir(process_dir)):
+            os.makedirs(process_dir)
+        return process_dir + ".all"
 
     def output_path(self):
         return {
@@ -239,10 +249,12 @@ class Session:
     async def process_early_video(self):
         if len(self.videos) == 1:
             self.early_video_path = self.videos[0].flv_file_path
+            return
+        
         format_check = True
         ref_video_res = self.videos[0].video_resolution
         for video in self.videos:
-            if video.video_resolution != ref_video_res:
+            if video.video_resolution != ref_video_res: # TODO 分辨率不一致就不再Copy? 只有一个文件也Copy?
                 format_check = False
                 break
         if not format_check:
@@ -255,7 +267,27 @@ class Session:
         await async_wait_output(ffmpeg_command)
         self.early_video_path = self.output_path()['early_video']
 
-    async def process_video(self):
+    # 生成第一遍的无弹幕版的视频
+    async def gen_early_video(self):
+        if len(self.videos) == 0:
+            print(f"No video in session for {self.room_id}@{self.start_time}, skip!")
+            return
+        await self.merge_xml()
+        await self.clean_xml()
+        await self.process_xml()
+        await self.process_danmaku()
+        await self.process_thumbnail()
+        self.generate_concat()
+        await self.process_early_video()
+
+    # 生成第二遍的带弹幕高能进度条的视频
+    # TODO 1.改成多P上传
+    # 2.考虑将ffmpeg参数都改成配置文件
+    async def gen_danmaku_video(self):
+        if len(self.videos) == 0:
+            print(f"No video in session for {self.room_id}@{self.start_time}, skip!")
+            return
+        
         total_time = sum([video.video_length_flv for video in self.videos])
         max_size = 8000_000 * 8  # Kb
         audio_bitrate = 320
@@ -287,29 +319,10 @@ class Session:
         [out_color][gray_crop]overlay=y=main_h-overlay_h[out];
         [out]ass='{self.output_path()['ass']}'[out_sub]" \
         -map "[out_sub]" -map 1:a ''' + \
-                         (" -c:v h264_nvenc -preset slow "
-                          if GPUInfo.check_empty() is not None else " -c:v libx264 -preset medium ") + \
+                         " -c:v libx264 -preset faster " + \
                          f'-b:v {video_bitrate}K' + f''' -b:a 320K -ar 44100  "{self.output_path()['danmaku_video']}" \
                     ''' + f'>> "{self.output_path()["video_log"]}" 2>&1'
         await async_wait_output(ffmpeg_command)
-
-    async def gen_early_video(self):
-        if len(self.videos) == 0:
-            print(f"No video in session for {self.room_id}@{self.start_time}, skip!")
-            return
-        await self.merge_xml()
-        await self.clean_xml()
-        await self.process_xml()
-        await self.process_danmaku()
-        await self.process_thumbnail()
-        self.generate_concat()
-        await self.process_early_video()
-
-    async def gen_danmaku_video(self):
-        if len(self.videos) == 0:
-            print(f"No video in session for {self.room_id}@{self.start_time}, skip!")
-            return
-        await self.process_video()
 
 
 if __name__ == '__main__':

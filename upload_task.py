@@ -3,6 +3,7 @@ import os.path
 from bilibili_api.video import video_upload, video_cover_upload, video_submit, get_video_info, video_update
 
 from recorder_config import UploaderAccount
+from biliup.plugins.bili_webup import BiliBili, Data
 
 SPECIAL_SPACE = "\u2007"
 
@@ -27,7 +28,7 @@ class UploadTask:
         self.verify = self.account.verify
         self.trial = 0
 
-    def upload(self, session_dict: {str: str}):
+    def upload(self, session_dict: dict[str, str]):
         def on_progress(update):
             print(update)
 
