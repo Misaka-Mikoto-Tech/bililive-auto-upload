@@ -15,6 +15,7 @@ from bilibili_api import video
 from comment_task import CommentTask
 from blrec_event import BlrecEvent
 from recorder_config import RecorderConfig, UploaderAccount
+from room_sessions import RoomSessions
 #from recorder_manager import RecorderManager
 from session import Session, Video
 from subtitle_task import SubtitleTask
@@ -41,7 +42,7 @@ class RecordUploadManager:
         
         # 改为接收 blrec 的数据，BililiveRecorder 会漏录数据
         #self.recorder_manager = RecorderManager([room.id for room in self.config.rooms])
-        self.sessions: dict[int, Session] = dict() # blrec 没有session_id的概念，因此以room_id作为key
+        self.sessions: dict[int, RoomSessions] = dict() # key:room_id
         self.video_upload_queue: Queue[UploadTask] = Queue()
         self.comment_post_queue: Queue[CommentTask] = Queue()
         self.subtitle_post_queue: Queue[SubtitleTask] = Queue()
@@ -263,20 +264,34 @@ class RecordUploadManager:
             print(f"Received blrec event:{event_type} of room:{room_id}")
         
         if event_type in ["LiveBeganEvent", "RecordingStartedEvent"]: # 允许从中间开始录制
-            for session in self.sessions.values():
-                if session.room_id == room_id and \
-                        (event_timestamp - session.end_time).total_seconds() / 60 < CONTINUE_SESSION_MINUTES: # 5分钟内重新开播(开始录制)的视为同一场直播
-                    if session.upload_task is not None:
-                        session.upload_task.cancel()
-                    return
-            self.sessions[room_id] = Session(update_json, room_config=room_config)
+            for sessions in self.sessions.values():
+                if sessions.room_id == room_id:
+                    last_session = sessions[-1]
+                    # 5分钟内重新开播(开始录制)的视为同一场直播
+                    # 两个事件均收到时忽略第二个事件（开播前就已运行会收到两个事件）
+                    if (event_timestamp - last_session.end_time).total_seconds() / 60 < CONTINUE_SESSION_MINUTES or \
+                        (event_timestamp - last_session.start_time).total_seconds() < 10:
+                        if last_session.upload_task is not None:
+                            last_session.upload_task.cancel()
+                        return
+            if self.sessions.get(room_id) is None:
+                self.sessions[room_id] = RoomSessions()
+            self.sessions[room_id].add_session_and_active(Session(update_json, room_config=room_config))
         else:
-            current_session: Session = self.sessions[room_id]
-            current_session.process_update(update_json)
+            room_sessions:RoomSessions = self.sessions.get(room_id)
+            if room_sessions is None:
+                return
+            current_session: Session = room_sessions.get_active_session()
+            if current_session is None:
+                return
+
+            if not current_session.process_update(update_json):
+                return
+            
             # blrec 支持转封装flv为mp4，录制结束后可能还会收到VideoPostprocessingCompletedEvent事件，
             # 此事件可能会在录制结束事件之后发送，当前无法得知是否会被转封装，临时解决方案是关闭转封装功能
             if event_type == "VideoFileCompletedEvent":
-                new_video = Video(update_json)
+                new_video = Video(update_json, current_session)
                 await current_session.add_video(new_video)
             elif event_type in ["RecordingFinishedEvent", "RecordingCancelledEvent"]: # 录制结束和取消都视为录制完成
                 current_session.upload_task = \

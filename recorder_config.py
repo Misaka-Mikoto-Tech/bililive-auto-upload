@@ -38,6 +38,7 @@ class UploaderAccount:
 class RecoderRoom:
     id: int
     uploader: Optional[str]
+    gen_he_video: bool # 是否生成高能进度条视频
     tags: Optional[str]
     channel_id: Optional[int]
     title: Optional[str]
@@ -48,6 +49,7 @@ class RecoderRoom:
 
     def __init__(self, config_dict):
         self.uploader = None
+        self.gen_he_video = True
         self.he_user_dict = None
         self.he_regex_rules = None
         for key, value in config_dict.items():

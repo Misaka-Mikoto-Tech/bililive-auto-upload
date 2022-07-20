@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import datetime
 import json
@@ -7,7 +8,6 @@ import time
 import traceback
 from asyncio import Task
 from typing import Optional
-from __future__ import annotations
 
 import dateutil.parser
 from blrec_event import BlrecEvent
@@ -16,6 +16,7 @@ from blrec_event import BlrecEvent
 from commons import BINARY_PATH
 from commons import get_room_id
 from recorder_config import RecoderRoom
+from room_sessions import RoomSessions
 
 
 async def async_wait_output(command):
@@ -36,18 +37,20 @@ class Video:
     base_path: str
     base_dir: str
     room_id: int
+    session:Session
     date:datetime
     video_resolution: str
     video_resolution_x: int
     video_resolution_y: int
     video_length_flv: float
 
-    def __init__(self, file_closed_event_json):
+    def __init__(self, file_closed_event_json:str, session:Session):
         flv_name = file_closed_event_json['data']['path']
         self.base_path = os.path.abspath(flv_name.rpartition('.')[0])
         self.base_dir = os.path.dirname(self.base_path)
         self.room_id = file_closed_event_json["data"]["room_id"]
         self.date = file_closed_event_json["date"]
+        self.session = session
 
     def flv_file_path(self):
         return self.base_path + ".flv"
@@ -79,6 +82,9 @@ class Video:
 
 
 class Session:
+    session_id:int
+    room_sessions:RoomSessions
+    events:set[str] # 已处理过的事件，防止重复处理（blrec可能会重复发送）
     live_start_time: datetime.datetime # 开播时间
     start_time: datetime.datetime # 开始录制事件
     end_time: Optional[datetime.datetime]
@@ -111,11 +117,16 @@ class Session:
         self.early_video_path = None
         self.process_update(session_start_event_json)
         self.upload_task: Optional[Task] = None
+        self.events = set()
 
-    def process_update(self, update_json):
+    def process_update(self, update_json:str) -> bool:
+        if update_json["id"] in self.events:
+            return False
+        self.events.add(update_json["id"])
         BlrecEvent.update_room_info(json, self)
         if update_json["type"] in ["RecordingFinishedEvent", "RecordingCancelledEvent"]: # 录制结束
             self.end_time = dateutil.parser.isoparse(update_json["date"])
+        return True
 
     async def add_video(self, video):
         try:

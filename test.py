@@ -1,11 +1,23 @@
+from __future__ import annotations
 import asyncio
+import datetime
+import json
+import os
+import sys
+import time
+import traceback
+from asyncio import Task
+from typing import Optional
 
-temp_title = "abc"
-i = 1
-other_video_titles = [
-    "xxx", "abc", "yyy", "abc", "abc"
-]
+class Cls:
+    xx:int
 
-other_video_titles.append
+datas:set = set()
 
-print(title)
+cls = Cls()
+cls.xx = 2
+datas.add(cls)
+datas.add(Cls())
+
+if(Cls() in datas):
+    print("cc is none")
