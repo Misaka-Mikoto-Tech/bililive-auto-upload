@@ -142,9 +142,9 @@ class Session:
         self.total_length += new_length
 
     def output_base_path(self):
-        process_dir = self.videos[0].base_dir + "/process"
+        process_dir = self.videos[0].base_dir + "/postprocess/" + self.start_time.strftime("%Y-%m-%d")
         if(not os.path.isdir(process_dir)):
-            os.makedirs(process_dir)
+            os.makedirs(process_dir, exist_ok=True)
         return process_dir + ".all"
 
     def output_path(self):
@@ -166,7 +166,7 @@ class Session:
             "video_log": self.output_base_path() + ".video.log",
         }
 
-    async def merge_xml(self):
+    async def merge_xml(self): # 官方仓库说支持blrec格式的弹幕文件，因此无需重写
         xmls = ' '.join(['"' + video.xml_file_path() + '"' for video in self.videos])
         danmaku_merge_command = \
             f"python3 -m danmaku_tools.merge_danmaku " \

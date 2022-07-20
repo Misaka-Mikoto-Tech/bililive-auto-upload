@@ -18,6 +18,7 @@ from recorder_config import RecorderConfig, UploaderAccount
 from room_sessions import RoomSessions
 #from recorder_manager import RecorderManager
 from session import Session, Video
+from session_manager import SessionManager
 from subtitle_task import SubtitleTask
 from task_save import TaskSave
 from upload_task import UploadTask
@@ -42,7 +43,7 @@ class RecordUploadManager:
         
         # 改为接收 blrec 的数据，BililiveRecorder 会漏录数据
         #self.recorder_manager = RecorderManager([room.id for room in self.config.rooms])
-        self.sessions: dict[int, RoomSessions] = dict() # key:room_id
+        self.session_manager: SessionManager = SessionManager()
         self.video_upload_queue: Queue[UploadTask] = Queue()
         self.comment_post_queue: Queue[CommentTask] = Queue()
         self.subtitle_post_queue: Queue[SubtitleTask] = Queue()
@@ -161,6 +162,7 @@ class RecordUploadManager:
             finally:
                 time.sleep(60)
 
+    # 接收到录播结束事件后的回调函数
     async def upload_video(self, session: Session):
         await asyncio.sleep(WAIT_BEFORE_SESSION_MINUTES * 60)
         if len(session.videos) == 0:
@@ -221,26 +223,27 @@ class RecordUploadManager:
             )
             self.video_upload_queue.put(early_upload_task)
         await asyncio.sleep(WAIT_SESSION_MINUTES * 60)
-        await session.gen_danmaku_video()
-        danmaku_upload_task = UploadTask(
-            #session_id=session.session_id,
-            video_path=session.output_path()['danmaku_video'],
-            thumbnail_path=session.output_path()['thumbnail'],
-            sc_path=session.output_path()['sc_file'],
-            he_path=session.output_path()['he_file'],
-            subtitle_path=session.output_path()['sc_srt'],
-            title=title,
-            source=room_config.source,
-            description=description,
-            tag=room_config.tags,
-            channel_id=room_config.channel_id,
-            danmaku=True,
-            account=uploader
-        )
-        self.video_upload_queue.put(
-            danmaku_upload_task
-        )
-        if early_upload_task is None: # TODO 无原始文件时直接创建评论任务？
+        if self.config.gen_he_video or session.early_video_path is None: # 未能快速生成early_video时强制生成弹幕高能版
+            await session.gen_danmaku_video()
+            danmaku_upload_task = UploadTask(
+                #session_id=session.session_id,
+                video_path=session.output_path()['danmaku_video'],
+                thumbnail_path=session.output_path()['thumbnail'],
+                sc_path=session.output_path()['sc_file'],
+                he_path=session.output_path()['he_file'],
+                subtitle_path=session.output_path()['sc_srt'],
+                title=title,
+                source=room_config.source,
+                description=description,
+                tag=room_config.tags,
+                channel_id=room_config.channel_id,
+                danmaku=True,
+                account=uploader
+            )
+            self.video_upload_queue.put(
+                danmaku_upload_task
+            )
+        if early_upload_task is None: # TODO 无原始文件时直接创建评论任务
             self.comment_post_queue.put(
                 CommentTask.from_upload_task(danmaku_upload_task)
             )
@@ -274,14 +277,9 @@ class RecordUploadManager:
                         if last_session.upload_task is not None:
                             last_session.upload_task.cancel()
                         return
-            if self.sessions.get(room_id) is None:
-                self.sessions[room_id] = RoomSessions()
-            self.sessions[room_id].add_session_and_active(Session(update_json, room_config=room_config))
+            self.session_manager.add_session(Session(update_json, room_config=room_config))
         else:
-            room_sessions:RoomSessions = self.sessions.get(room_id)
-            if room_sessions is None:
-                return
-            current_session: Session = room_sessions.get_active_session()
+            current_session: Session = self.session_manager.get_recording_session(room_id)
             if current_session is None:
                 return
 

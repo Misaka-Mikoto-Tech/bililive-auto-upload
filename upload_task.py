@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os.path
 
 from bilibili_api.video import video_upload, video_cover_upload, video_submit, get_video_info, video_update

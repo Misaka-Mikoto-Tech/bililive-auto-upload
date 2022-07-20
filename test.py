@@ -8,16 +8,16 @@ import time
 import traceback
 from asyncio import Task
 from typing import Optional
+import dateutil.parser
 
 class Cls:
-    xx:int
+    x:int
 
-datas:set = set()
+    def __init__(self, x:int) -> None:
+        self.x = x
 
-cls = Cls()
-cls.xx = 2
-datas.add(cls)
-datas.add(Cls())
+dic:dict = dict()
+dic[1] = Cls(10)
+dic[3] = Cls(30)
 
-if(Cls() in datas):
-    print("cc is none")
+print(dic.pop(100, None))
