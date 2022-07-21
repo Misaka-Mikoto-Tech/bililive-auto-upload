@@ -24,7 +24,7 @@ import numpy as np
 from scipy.ndimage.filters import convolve
 from scipy.stats import halfnorm
 
-from danmaku_tools.danmaku_tools import read_danmaku_file, get_value, get_time
+from danmaku_tools import read_danmaku_file, get_value, get_time
 
 import jieba
 from collections import Counter
@@ -472,14 +472,16 @@ if __name__ == '__main__':
                     user = gift_chats_element.attrib['user']
                     time = float(gift_chats_element.attrib['ts'])
                     gift_name = gift_chats_element.attrib['giftname']
-                    gift_count = gift_chats_element.attrib['giftcount']
+                    gift_count = int(gift_chats_element.attrib['giftcount'])
                     if last_gift is None:
                         last_gift = [user, gift_name, gift_count, price, time]
                     else:
-                        if user == last_gift[0] and gift_name == last_gift[1]: # 合并同一个用户的连续多个礼物（用户点了连发）
+                        #print(f"time:{time},user:{user},last_user:{last_gift[0]}, name:{gift_name}, last_name:{last_gift[1]}")
+                        if (user == last_gift[0]) and (gift_name == last_gift[1]): # 合并同一个用户的连续多个礼物（用户点了连发）
                             last_gift[2] += gift_count
                         else:
                             gift_tuple += [tuple(last_gift)]
+                            last_gift = [user, gift_name, gift_count, price, time]
             except:
                 print(f"giftchat processing error {gift_chats_element}")
         if last_gift is not None:
@@ -489,7 +491,9 @@ if __name__ == '__main__':
             if len(gift_tuple) != 0:
                 gift_text = "礼物列表："
                 for user, gift_name, gift_count, price, time in gift_tuple:
-                    gift_text += f"\n {convert_time(int(time))} ¥{price / 1000} {user}: 赠送{gift_count}个{gift_name}"
+                    money = gift_count * price / 1000
+                    if money > 1.0: # 大于1元的才记录
+                        gift_text += f"\n {convert_time(int(time))} ¥{money} {user}: 赠送{gift_count}个{gift_name}"
                 gift_text += "\n"
                 gift_text = segment_text(gift_text)
             else:
@@ -539,7 +543,7 @@ if __name__ == '__main__':
 
             for time, price, message, user, duration in sc_tuple:
                 start = time
-                end = time + duration * 0.6
+                end = time + float(duration) * 0.6
                 content = f"¥{price} {user}: {message}".replace("绑架", "**")
                 new_sc, new_subtitles, cur_time = flush_sc(start_time=cur_time,
                                                            end_time=start)  # Flush all the previous SCs
@@ -549,7 +553,7 @@ if __name__ == '__main__':
                 end_time = max([sc[1] for sc in active_sc])
                 _, new_subtitles, _ = flush_sc(start_time=cur_time, end_time=end_time)
                 subtitles += new_subtitles
-            with open(args.sc_srt, "w") as file:
+            with open(args.sc_srt, "w", encoding="utf-8") as file:
                 file.write(srt.compose(subtitles))
 
     if args.he_map is not None or args.graph is not None or args.he_time is not None or args.he_range:
