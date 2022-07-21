@@ -68,7 +68,7 @@ def preprocess_danmaku(danmaku):
     danmaku -- danmaku string after processing
     """
     if args.regex_rules is not None:
-        for line in open(args.regex_rules, 'r'):
+        for line in open(args.regex_rules, 'r', encoding="utf-8"):
             line = line.strip().split()
             assert(len(line) == 2)
             a = danmaku
@@ -501,6 +501,7 @@ if __name__ == '__main__':
             with open(args.sc_list, "a", encoding='utf-8') as file:
                 file.write(gift_text)
         
+        # TODO 舰长:guard
 
         if args.sc_srt is not None:
             active_sc = []
@@ -567,7 +568,7 @@ if __name__ == '__main__':
         heat_values = get_heat_time(xml_list, idf_list)
 
         if args.he_range is not None:
-            with open(args.he_range, "w") as file:
+            with open(args.he_range, "w", encoding="utf-8") as file:
                 json.dump(heat_values[4], file)
 
         if args.he_map is not None:
@@ -627,7 +628,7 @@ if __name__ == '__main__':
 
             text += "\n"
             text = segment_text(text)
-            with open(args.he_map, "w") as file:
+            with open(args.he_map, "w", encoding="utf-8") as file:
                 file.write(text)
 
         if args.he_time is not None:
@@ -640,7 +641,7 @@ if __name__ == '__main__':
                 highest_time_id = he_pairs[0][np.argmax(he_pairs[1])]
                 highest_time = all_timestamps[highest_time_id]
                 text = str(highest_time)
-            with open(args.he_time, "w") as file:
+            with open(args.he_time, "w", encoding="utf-8") as file:
                 file.write(text)
 
         if args.graph is not None:
