@@ -15,7 +15,6 @@ from bilibili_api import video
 from comment_task import CommentTask
 from blrec_event import BlrecEvent
 from recorder_config import RecorderConfig, UploaderAccount
-from room_sessions import RoomSessions
 #from recorder_manager import RecorderManager
 from session import Session, Video
 from session_manager import SessionManager
@@ -69,7 +68,6 @@ class RecordUploadManager:
         while True:
             upload_task = self.video_upload_queue.get()
             try:
-                # TODO session_id 貌似最好还是要处理一下的，否则无法区分同个room_id的多个已上传但未通过审核的任务
                 first_video_comment = upload_task.session_id not in self.save.session_id_map
                 bv_id = upload_task.upload(self.save.session_id_map)
                 sys.stdout.flush()

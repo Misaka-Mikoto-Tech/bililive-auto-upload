@@ -16,7 +16,7 @@ from blrec_event import BlrecEvent
 from commons import BINARY_PATH
 from commons import get_room_id
 from recorder_config import RecoderRoom
-from room_sessions import RoomSessions
+from session_manager import SessionManager
 
 
 async def async_wait_output(command):
@@ -83,7 +83,7 @@ class Video:
 
 class Session:
     session_id:int
-    room_sessions:RoomSessions
+    session_manager:SessionManager
     events:set[str] # 已处理过的事件，防止重复处理（blrec可能会重复发送）
     live_start_time: datetime.datetime # 开播时间
     start_time: datetime.datetime # 开始录制事件

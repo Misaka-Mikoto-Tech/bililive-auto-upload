@@ -39,6 +39,7 @@ class SessionManager:
 
     def add_session(self, session:Session):
         session.session_id = self.__max_session_id
+        session.session_manager = self
         self.__max_session_id += 1
         self.all_sessions[session.session_id] = session
         self.recording_session_of_room[session.room_id] = session
