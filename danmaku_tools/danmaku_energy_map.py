@@ -449,7 +449,7 @@ if __name__ == '__main__':
             if len(sc_tuple) != 0:
                 sc_text = "醒目留言列表："
                 for time, price, message, user, _ in sc_tuple:
-                    sc_text += f"\n {convert_time(int(time))} ¥{price / 1000} {user}: {message}"
+                    sc_text += f"\n {convert_time(int(time))} ¥{price / 1000}  {user}: {message}"
                 sc_text += "\n"
                 sc_text = segment_text(sc_text)
             else:
@@ -489,11 +489,11 @@ if __name__ == '__main__':
 
         if args.sc_list is not None: # 将礼物信息追加在sc下面
             if len(gift_tuple) != 0:
-                gift_text = "礼物列表："
+                gift_text = "礼物列表(大于¥1)："
                 for user, gift_name, gift_count, price, time in gift_tuple:
                     money = gift_count * price / 1000
                     if money > 1.0: # 大于1元的才记录
-                        gift_text += f"\n {convert_time(int(time))} ¥{money} {user}: 赠送{gift_count}个{gift_name}"
+                        gift_text += f"\n {convert_time(int(time))} ¥{money}  {user}: 赠送{gift_count}个{gift_name}"
                 gift_text += "\n"
                 gift_text = segment_text(gift_text)
             else:
@@ -617,6 +617,8 @@ if __name__ == '__main__':
                 text = f"全场最高能：{convert_time(highest_time)}\t{highest_sentence}\n\n其他高能："
 
                 for i, (start_he_time, end_he_time) in enumerate(heat_values[4]):
+                    if heat_comments[i].strip() == "":
+                        continue
                     text += f"\n {convert_time(start_he_time)} - {convert_time(end_he_time)}\t{heat_comments[i]}\t"
                     text += "("
                     text += ",".join([kw for kw, value in \
