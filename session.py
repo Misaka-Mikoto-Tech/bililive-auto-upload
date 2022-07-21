@@ -13,7 +13,7 @@ import dateutil.parser
 from blrec_event import BlrecEvent
 #from gpuinfo import GPUInfo
 
-from commons import BINARY_PATH
+from commons import BINARY_PATH, get_danmaku_tool_file_path
 from commons import get_room_id
 from recorder_config import RecoderRoom
 from session_manager import SessionManager
@@ -168,8 +168,9 @@ class Session:
 
     async def merge_xml(self): # 官方仓库说支持blrec格式的弹幕文件，因此无需重写
         xmls = ' '.join(['"' + video.xml_file_path() + '"' for video in self.videos])
+        tool_path = get_danmaku_tool_file_path("merge_danmaku.py")
         danmaku_merge_command = \
-            f"python3 -m danmaku_tools.merge_danmaku " \
+            f"python3 -m \"{tool_path}\" " \
             f"{xmls} " \
             f"--video_time \".flv\" " \
             f"--output \"{self.output_path()['xml']}\" " \
@@ -177,16 +178,18 @@ class Session:
         await async_wait_output(danmaku_merge_command)
 
     async def clean_xml(self):
+        tool_path = get_danmaku_tool_file_path("clean_danmaku.py")
         danmaku_clean_command = \
-            f"python3 -m danmaku_tools.clean_danmaku " \
+            f"python3 -m \"{tool_path}\" " \
             f"{self.output_path()['xml']} " \
             f"--output \"{self.output_path()['clean_xml']}\" " \
             f">> \"{self.output_path()['extras_log']}\" 2>&1"
         await async_wait_output(danmaku_clean_command)
 
     async def process_xml(self):
+        tool_path = get_danmaku_tool_file_path("danmaku_energy_map.py")
         danmaku_extras_command = \
-            f"python3 -m danmaku_tools.danmaku_energy_map " \
+            f"python3 -m \"{tool_path}\" " \
             f"--graph \"{self.output_path()['he_graph']}\" " \
             f"--he_map \"{self.output_path()['he_file']}\" " \
             f"--sc_list \"{self.output_path()['sc_file']}\" " \

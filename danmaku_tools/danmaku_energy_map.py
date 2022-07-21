@@ -429,7 +429,7 @@ if __name__ == '__main__':
         sc_tuple = []
         for sc_chat_element in sc_chats:
             try:
-                price = sc_chat_element.attrib['price']
+                price = float(sc_chat_element.attrib['price'])
                 if sc_chat_element.get("raw", None) is not None:
                     raw_message = json.loads(sc_chat_element.attrib['raw'])
                     message = raw_message["message"].replace('\n', '\t')
@@ -449,13 +449,55 @@ if __name__ == '__main__':
             if len(sc_tuple) != 0:
                 sc_text = "醒目留言列表："
                 for time, price, message, user, _ in sc_tuple:
-                    sc_text += f"\n {convert_time(int(time))} ¥{price} {user}: {message}"
+                    sc_text += f"\n {convert_time(int(time))} ¥{price / 1000} {user}: {message}"
                 sc_text += "\n"
                 sc_text = segment_text(sc_text)
             else:
                 sc_text = "没有醒目留言..."
             with open(args.sc_list, "w", encoding='utf-8') as file:
                 file.write(sc_text)
+
+        gift_chats = [element for element in xml_list if element.tag == 'gift']
+        gift_tuple = []
+        last_gift = None # [user, gift_name, gift_count, price, time]
+        for gift_chats_element in gift_chats:
+            try:
+                price = float(gift_chats_element.attrib['price'])
+                if gift_chats_element.get("raw", None) is not None:
+                    raw_message = json.loads(gift_chats_element.attrib['raw'])
+                    message = raw_message["message"].replace('\n', '\t')
+                    user = raw_message["user_info"]['uname']
+                    time = float(gift_chats_element.attrib['ts'])
+                else: #blrec
+                    user = gift_chats_element.attrib['user']
+                    time = float(gift_chats_element.attrib['ts'])
+                    gift_name = gift_chats_element.attrib['giftname']
+                    gift_count = gift_chats_element.attrib['giftcount']
+                    if last_gift is None:
+                        last_gift = [user, gift_name, gift_count, price, time]
+                    else:
+                        if user == last_gift[0] and gift_name == last_gift[1]: # 合并同一个用户的连续多个礼物（用户点了连发）
+                            last_gift[2] += gift_count
+                        else:
+                            gift_tuple += [tuple(last_gift)]
+            except:
+                print(f"giftchat processing error {gift_chats_element}")
+        if last_gift is not None:
+            gift_tuple += [tuple(last_gift)]
+
+        if args.sc_list is not None: # 将礼物信息追加在sc下面
+            if len(gift_tuple) != 0:
+                gift_text = "礼物列表："
+                for user, gift_name, gift_count, price, time in gift_tuple:
+                    gift_text += f"\n {convert_time(int(time))} ¥{price / 1000} {user}: 赠送{gift_count}个{gift_name}"
+                gift_text += "\n"
+                gift_text = segment_text(gift_text)
+            else:
+                gift_text = "没有礼物..."
+            with open(args.sc_list, "a", encoding='utf-8') as file:
+                file.write(gift_text)
+        
+
         if args.sc_srt is not None:
             active_sc = []
             subtitles = []

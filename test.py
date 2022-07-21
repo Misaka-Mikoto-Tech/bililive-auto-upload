@@ -1,4 +1,5 @@
 from __future__ import annotations
+from array import array
 import asyncio
 import datetime
 import json
@@ -10,14 +11,8 @@ from asyncio import Task
 from typing import Optional
 import dateutil.parser
 
-class Cls:
-    x:int
+from commons import get_danmaku_tool_file_path, get_file_dir
 
-    def __init__(self, x:int) -> None:
-        self.x = x
-
-dic:dict = dict()
-dic[1] = Cls(10)
-dic[3] = Cls(30)
-
-print(dic.pop(100, None))
+arr:array = ["user", "gift_name", 10]
+t = tuple(arr)
+print(t)
