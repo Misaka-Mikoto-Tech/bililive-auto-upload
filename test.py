@@ -13,6 +13,8 @@ import dateutil.parser
 
 from commons import get_danmaku_tool_file_path, get_file_dir
 
-arr:array = ["user", "gift_name", 10]
-t = tuple(arr)
-print(t)
+str = "  "
+if str.strip() == "":
+    print("empty")
+else:
+    print("not")

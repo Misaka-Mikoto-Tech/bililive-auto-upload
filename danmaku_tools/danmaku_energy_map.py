@@ -457,6 +457,33 @@ if __name__ == '__main__':
             with open(args.sc_list, "w", encoding='utf-8') as file:
                 file.write(sc_text)
 
+        guard_chats = [element for element in xml_list if element.tag == 'guard']
+        guard_tuple = []
+        for guard_chat_element in guard_chats:
+            try:
+                price = float(guard_chat_element.attrib['price'])
+                if guard_chat_element.get('raw', None) is not None:
+                    pass
+                else: #blrec
+                    time = float(guard_chat_element.attrib['ts'])
+                    user = guard_chat_element.attrib['user']
+                    gift_name = guard_chat_element.attrib['giftname']
+                    gift_count = int(guard_chat_element.attrib['giftcount'])
+                    level = int(guard_chat_element.attrib['level']) # 1:总督,2:提督,3:舰长
+                guard_tuple += [(user, gift_name, gift_count, price, time)]
+            except:
+                print(f"guardchat processing error {guard_chat_element}")
+        
+        if args.sc_list is not None: # 将舰长信息放sc下面
+            if len(guard_tuple) != 0:
+                guard_text = "大航海列表："
+                for user, gift_name, gift_count, price, time in guard_tuple:
+                    guard_text += f"\n{convert_time(int(time))}  ¥{price} {user}：购买{gift_count}个 {gift_name}"
+                guard_text += "\n"
+                guard_text = segment_text(guard_text)
+                with open(args.sc_list, "a", encoding='utf-8') as file:
+                    file.write(guard_text)
+
         gift_chats = [element for element in xml_list if element.tag == 'gift']
         gift_tuple = []
         last_gift = None # [user, gift_name, gift_count, price, time]
@@ -487,7 +514,7 @@ if __name__ == '__main__':
         if last_gift is not None:
             gift_tuple += [tuple(last_gift)]
 
-        if args.sc_list is not None: # 将礼物信息追加在sc下面
+        if args.sc_list is not None: # 将礼物信息追加在舰长信息下面
             if len(gift_tuple) != 0:
                 gift_text = "礼物列表(大于¥1)："
                 for user, gift_name, gift_count, price, time in gift_tuple:
@@ -501,8 +528,6 @@ if __name__ == '__main__':
             with open(args.sc_list, "a", encoding='utf-8') as file:
                 file.write(gift_text)
         
-        # TODO 舰长:guard
-
         if args.sc_srt is not None:
             active_sc = []
             subtitles = []
@@ -620,11 +645,11 @@ if __name__ == '__main__':
                 for i, (start_he_time, end_he_time) in enumerate(heat_values[4]):
                     if heat_comments[i].strip() == "":
                         continue
-                    text += f"\n {convert_time(start_he_time)} - {convert_time(end_he_time)}\t{heat_comments[i]}\t"
-                    text += "("
-                    text += ",".join([kw for kw, value in \
-                            find_keywords(wordcount_slices, idf_list, (start_he_time, end_he_time), n_keys=3)])
-                    text += ")"
+                    text += f"\n {convert_time(start_he_time)} - {convert_time(end_he_time)}\t{heat_comments[i]}"
+                    #text += "(" # 动态生成的关键字有可能触发阿瓦隆系统，只有原始文字安全性是最高的
+                    #text += ",".join([kw for kw, value in \
+                    #        find_keywords(wordcount_slices, idf_list, (start_he_time, end_he_time), n_keys=3)])
+                    #text += ")"
 
             text += "\n"
             text = segment_text(text)
