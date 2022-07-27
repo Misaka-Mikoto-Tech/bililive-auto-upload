@@ -375,6 +375,9 @@ def segment_text(text):
     new_segment = ""
 
     for line in lines:
+        # 正则处理屏蔽词
+        
+
         if len(new_segment) + len(line) < TEXT_LIMIT:
             new_segment += line + "\n"
         else:
@@ -421,7 +424,7 @@ def find_keywords(wordcount_slices, idf_list, he_range, n_keys=3):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    xml_list = read_danmaku_file(args.danmaku)
+    xml_list = read_danmaku_file(args.danmaku, True)
 
     if args.sc_list is not None or args.sc_srt is not None:
         sc_chats = [element for element in xml_list if element.tag == 'sc']
@@ -449,7 +452,7 @@ if __name__ == '__main__':
             if len(sc_tuple) != 0:
                 sc_text = "醒目留言列表："
                 for time, price, message, user, _ in sc_tuple:
-                    sc_text += f"\n {convert_time(int(time))} ¥{price / 1000}  {user}: {message}"
+                    sc_text += f"\n {convert_time(int(time))}  {user}: {message}  (¥{price / 1000})"
                 sc_text += "\n"
                 sc_text = segment_text(sc_text)
             else:
@@ -470,6 +473,7 @@ if __name__ == '__main__':
                     gift_name = guard_chat_element.attrib['giftname']
                     gift_count = int(guard_chat_element.attrib['giftcount'])
                     level = int(guard_chat_element.attrib['level']) # 1:总督,2:提督,3:舰长
+                    print(f"大航海:{user}")
                 guard_tuple += [(user, gift_name, gift_count, price, time)]
             except:
                 print(f"guardchat processing error {guard_chat_element}")
@@ -478,7 +482,7 @@ if __name__ == '__main__':
             if len(guard_tuple) != 0:
                 guard_text = "大航海列表："
                 for user, gift_name, gift_count, price, time in guard_tuple:
-                    guard_text += f"\n{convert_time(int(time))}  ¥{price} {user}：购买{gift_count}个 {gift_name}"
+                    guard_text += f"\n{convert_time(int(time))}  {user}：购买{gift_count}个 {gift_name}  (¥{price / 1000})"
                 guard_text += "\n"
                 guard_text = segment_text(guard_text)
                 with open(args.sc_list, "a", encoding='utf-8') as file:
@@ -520,7 +524,7 @@ if __name__ == '__main__':
                 for user, gift_name, gift_count, price, time in gift_tuple:
                     money = gift_count * price / 1000
                     if money > 1.0: # 大于1元的才记录
-                        gift_text += f"\n {convert_time(int(time))} ¥{money}  {user}: 赠送{gift_count}个{gift_name}"
+                        gift_text += f"\n {convert_time(int(time))}  {user}: 赠送{gift_count}个{gift_name}  (¥{money})"
                 gift_text += "\n"
                 gift_text = segment_text(gift_text)
             else:
