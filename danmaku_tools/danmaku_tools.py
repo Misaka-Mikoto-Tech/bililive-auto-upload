@@ -15,7 +15,7 @@ def get_time(child: ET.Element):
     try:
         if child.tag == 'd':
             return float(child.attrib['p'].split(',')[0])
-        elif child.tag == 'gift' or child.tag == 'sc':
+        elif child.tag in ['gift', 'sc', 'guard']:
             return float(child.attrib['ts'])
     except:
         print(f"error getting time from {child}")

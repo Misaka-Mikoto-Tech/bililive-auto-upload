@@ -113,7 +113,7 @@ def gen_idf_dict(wordcount_slices):
     return idf_list
 
 
-def gen_danmaku_slices(all_children, interval=1):
+def  gen_danmaku_slices(all_children, interval=1):
 
     """
     Convert the danmaku list into slices with the prespecified interval
@@ -471,9 +471,9 @@ if __name__ == '__main__':
                     time = float(guard_chat_element.attrib['ts'])
                     user = guard_chat_element.attrib['user']
                     gift_name = guard_chat_element.attrib['giftname']
-                    gift_count = int(guard_chat_element.attrib['giftcount'])
+                    gift_count = int(guard_chat_element.attrib['count'])
                     level = int(guard_chat_element.attrib['level']) # 1:总督,2:提督,3:舰长
-                    print(f"大航海:{user}")
+                    #print(f"大航海:{user}")
                 guard_tuple += [(user, gift_name, gift_count, price, time)]
             except:
                 print(f"guardchat processing error {guard_chat_element}")
