@@ -31,13 +31,8 @@ Base_path:str = None
 def output_base_path()->str:
     global Base_path
     if Base_path is None:
-        dir = os.path.dirname(Video_path)
+        dir = os.path.dirname(Video_path) + '/danmaku/'
         filename = os.path.basename(Video_path)
-        matchObj = re.match(r'blive_\d+_(\d+\-\d+)\-\d+\-.*\.mp4', filename)
-        if matchObj:
-            dir = dir + f"/danmaku/{matchObj.group(1)}/"
-        else:
-            raise Exception('invalid video path')
         
         os.makedirs(dir, mode=0o777, exist_ok=True)
         Base_path = dir + filename.split(".")[-2] + ".all"
