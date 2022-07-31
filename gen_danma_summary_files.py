@@ -3,6 +3,7 @@ import asyncio
 import os
 from shutil import copyfile
 import sys
+import re
 
 from commons import get_danmaku_tool_file_path, get_file_dir
 
@@ -30,7 +31,16 @@ Base_path:str = None
 def output_base_path()->str:
     global Base_path
     if Base_path is None:
-        Base_path = Video_path.split(".")[-2] + ".all"
+        dir = os.path.dirname(Video_path)
+        filename = os.path.basename(Video_path)
+        matchObj = re.match(r'blive_\d+_(\d+\-\d+)\-\d+\-.*\.mp4', filename)
+        if matchObj:
+            dir = dir + f"/danmaku/{matchObj.group(1)}/"
+        else:
+            raise Exception('invalid video path')
+        
+        os.makedirs(dir, mode=0o777, exist_ok=True)
+        Base_path = dir + filename.split(".")[-2] + ".all"
     return Base_path
 
 def output_path():
@@ -87,5 +97,5 @@ if __name__ == '__main__':
     if len(args.video_file) == 0:
         print("video file path have to be passed as input.")
 
-    Video_path = args.video_file[0]
+    Video_path = args.video_file[0].replace('\\', '/')
     asyncio.run(do_gen_files(Video_path))
