@@ -365,7 +365,7 @@ def draw_he(he_graph, heat_time, heat_value_gaussian, heat_value_gaussian2, he_p
     plt.savefig(he_graph, transparent=True)
 
 
-TEXT_LIMIT = 900
+TEXT_LIMIT = 950
 SEG_CHAR = '\n\n\n\n'
 
 
@@ -425,9 +425,13 @@ def find_keywords(wordcount_slices, idf_list, he_range, n_keys=3):
 if __name__ == '__main__':
     args = parser.parse_args()
     xml_list = read_danmaku_file(args.danmaku, True)
+    money_total:int = 0
 
     if args.sc_list is not None or args.sc_srt is not None:
         sc_chats = [element for element in xml_list if element.tag == 'sc']
+        sc_text:str = ""
+        guard_text:str = ""
+        gift_text:str = ""
 
         sc_tuple = []
         for sc_chat_element in sc_chats:
@@ -445,6 +449,7 @@ if __name__ == '__main__':
                     time = float(sc_chat_element.attrib['ts'])
                     duration = sc_chat_element.attrib['time']
                 sc_tuple += [(time, price, message, user, duration)]
+                money_total += price
             except:
                 print(f"superchat processing error {sc_chat_element}")
 
@@ -454,11 +459,8 @@ if __name__ == '__main__':
                 for time, price, message, user, _ in sc_tuple:
                     sc_text += f"\n {convert_time(int(time))}  {user}: {message}  (¥{price / 1000})"
                 sc_text += "\n"
-                sc_text = segment_text(sc_text)
             else:
                 sc_text = "没有醒目留言..."
-            with open(args.sc_list, "w", encoding='utf-8') as file:
-                file.write(sc_text)
 
         guard_chats = [element for element in xml_list if element.tag == 'guard']
         guard_tuple = []
@@ -475,6 +477,7 @@ if __name__ == '__main__':
                     level = int(guard_chat_element.attrib['level']) # 1:总督,2:提督,3:舰长
                     #print(f"大航海:{user}")
                 guard_tuple += [(user, gift_name, gift_count, price, time)]
+                money_total += price * gift_count
             except:
                 print(f"guardchat processing error {guard_chat_element}")
         
@@ -484,9 +487,6 @@ if __name__ == '__main__':
                 for user, gift_name, gift_count, price, time in guard_tuple:
                     guard_text += f"\n{convert_time(int(time))}  {user}：购买{gift_count}个 {gift_name}  (¥{price / 1000})"
                 guard_text += "\n"
-                guard_text = segment_text(guard_text)
-                with open(args.sc_list, "a", encoding='utf-8') as file:
-                    file.write(guard_text)
 
         gift_chats = [element for element in xml_list if element.tag == 'gift']
         gift_tuple = []
@@ -504,6 +504,7 @@ if __name__ == '__main__':
                     time = float(gift_chats_element.attrib['ts'])
                     gift_name = gift_chats_element.attrib['giftname']
                     gift_count = int(gift_chats_element.attrib['giftcount'])
+                    money_total +=  gift_count * price
                     if last_gift is None:
                         last_gift = [user, gift_name, gift_count, price, time]
                     else:
@@ -511,26 +512,28 @@ if __name__ == '__main__':
                         if (user == last_gift[0]) and (gift_name == last_gift[1]): # 合并同一个用户的连续多个礼物（用户点了连发）
                             last_gift[2] += gift_count
                         else:
-                            gift_tuple += [tuple(last_gift)]
+                            if last_gift[2] * last_gift[3] > 1000:
+                                gift_tuple += [tuple(last_gift)]
                             last_gift = [user, gift_name, gift_count, price, time]
             except:
                 print(f"giftchat processing error {gift_chats_element}")
         if last_gift is not None:
-            gift_tuple += [tuple(last_gift)]
+            if last_gift[2] * last_gift[3] > 1000:
+                gift_tuple += [tuple(last_gift)]
 
         if args.sc_list is not None: # 将礼物信息追加在舰长信息下面
             if len(gift_tuple) != 0:
                 gift_text = "礼物列表(大于¥1)："
                 for user, gift_name, gift_count, price, time in gift_tuple:
-                    money = gift_count * price / 1000
-                    if money > 1.0: # 大于1元的才记录
-                        gift_text += f"\n {convert_time(int(time))}  {user}: 赠送{gift_count}个{gift_name}  (¥{money})"
+                    gift_text += f"\n {convert_time(int(time))}  {user}: 赠送{gift_count}个{gift_name}  (¥{gift_count * price / 1000})"
                 gift_text += "\n"
-                gift_text = segment_text(gift_text)
+                gift_text += f"\n总收入：￥{format(money_total / 1000, '.1f')}"
             else:
                 gift_text = "没有礼物..."
-            with open(args.sc_list, "a", encoding='utf-8') as file:
-                file.write(gift_text)
+            
+            incoming_text = segment_text(f"{sc_text}\r\n{guard_text}\r\n{gift_text}")
+            with open(args.sc_list, "w", encoding='utf-8') as file:
+                file.write(incoming_text)
         
         if args.sc_srt is not None:
             active_sc = []
@@ -628,7 +631,7 @@ if __name__ == '__main__':
                 tr4s.analyze("\n".join(comment_list), lower=True, source='no_filter')
                 key_sentences = tr4s.get_key_sentences(num=1, sentence_min_len=1)
                 if len(key_sentences) > 0:
-                    top_sentence = key_sentences[0]['sentence']
+                    top_sentence = f"{element.attrib['user']}:   {key_sentences[0]['sentence']}"
                 else:
                     top_sentence = ""
                 heat_comments += [top_sentence]
