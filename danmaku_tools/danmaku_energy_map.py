@@ -612,6 +612,7 @@ if __name__ == '__main__':
             tr4s = TextRank4Sentence()
             for start, end in tqdm(heat_values[4]):
                 comment_list = []
+                full_comment_list:list[(str, str)] = []
                 while True:
                     try:
                         element = next(xml_list_iter)
@@ -624,16 +625,22 @@ if __name__ == '__main__':
                     if element.tag == 'd':
                         text = element.text
                         if text is not None and not text.replace(" ", "").replace("哈", "") == "":
-                            comment_list += [text]
-                print(len(comment_list))
-                if len(comment_list) > 1000:
-                    comment_list = random.sample(comment_list, 1000)
+                            full_comment_list += [(text, f"{element.attrib['user']}:   {text}")]
+                print(len(full_comment_list))
+                if len(full_comment_list) > 1000:
+                    full_comment_list = random.sample(full_comment_list, 1000)
+                comment_list = [tpl[0] for tpl in full_comment_list]
                 tr4s.analyze("\n".join(comment_list), lower=True, source='no_filter')
                 key_sentences = tr4s.get_key_sentences(num=1, sentence_min_len=1)
                 if len(key_sentences) > 0:
-                    top_sentence = f"{element.attrib['user']}:   {key_sentences[0]['sentence']}"
+                    key_sentence0 = key_sentences[0]['sentence']
+                    top_sentence = ""
+                    for tpl in full_comment_list:
+                        if tpl[0].find(key_sentence0) >= 0: # key_sentence0 可能只是用户发送弹幕的一部分(无用符号被去除)
+                            top_sentence = tpl[1]
                 else:
                     top_sentence = ""
+                    
                 heat_comments += [top_sentence]
 
             if len(he_pairs[0]) == 0:
